@@ -1,6 +1,7 @@
 
 const { Storage } = require('@google-cloud/storage');
 const fs = require('fs');
+const path = require('path');
 
 async function uploadToStorage() {
   try {
@@ -16,35 +17,47 @@ async function uploadToStorage() {
     const bucketIdMatch = configFile.match(/defaultBucketID\s*=\s*"([^"]+)"/);
     
     if (!bucketIdMatch) {
-      console.error('❌ ID do bucket não encontrado no arquivo .replit');
-      console.error('👉 Crie um bucket no painel do Object Storage do Replit primeiro');
+      console.error('❌ ID do bucket do Replit não encontrado no arquivo .replit');
       return;
     }
     
     const bucketId = bucketIdMatch[1];
-    console.log(`📦 Usando bucket: ${bucketId}`);
+    console.log(`📋 Usando bucket Replit: ${bucketId}`);
 
-    // Configurar o cliente de storage
+    // Inicializar cliente do Storage
     const storage = new Storage();
     const bucket = storage.bucket(bucketId);
     
-    // Iniciar o upload
-    console.log(`🚀 Iniciando upload de ${fileName}...`);
+    // Nome do arquivo no bucket (usar timestamp para evitar conflitos)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const destinationName = `jacomprei-projeto-${timestamp}.zip`;
     
+    console.log(`🔄 Iniciando upload para ${destinationName}...`);
+    
+    // Fazer upload do arquivo
     await bucket.upload(fileName, {
-      destination: fileName,
+      destination: destinationName,
       metadata: {
         contentType: 'application/zip',
       },
     });
     
-    console.log(`✅ Upload concluído com sucesso!`);
-    console.log(`🔗 O arquivo está disponível no Object Storage do seu Repl`);
-    console.log(`📝 Você pode acessá-lo pela aba "Object Storage" no painel do Replit`);
+    console.log('✅ Upload concluído com sucesso!');
+    console.log(`📦 Arquivo disponível em: gs://${bucketId}/${destinationName}`);
+    
+    // Gerar URL pública (válida por 1 semana)
+    const [url] = await bucket.file(destinationName).getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 1 semana
+    });
+    
+    console.log('🌐 URL para download (válida por 1 semana):');
+    console.log(url);
     
   } catch (error) {
-    console.error('❌ Erro durante o upload:', error.message);
+    console.error('❌ Erro ao fazer upload para o Storage:', error.message);
   }
 }
 
+// Executar a função
 uploadToStorage();

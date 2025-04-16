@@ -1,56 +1,72 @@
+
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
-// Criar um arquivo de saída para o arquivo zip
-const output = fs.createWriteStream(path.join(__dirname, 'jacomprei-projeto.zip'));
+console.log('📦 Iniciando empacotamento do projeto...');
+
+// Criar arquivo de saída
+const outputPath = 'jacomprei-projeto.zip';
+const output = fs.createWriteStream(outputPath);
+
+// Inicializar archiver
 const archive = archiver('zip', {
-  zlib: { level: 9 } // Nível de compressão máxima
+  zlib: { level: 9 } // Nível máximo de compressão
 });
 
-// Escutar por erros
-archive.on('error', function(err) {
+// Escutar eventos do archiver
+output.on('close', () => {
+  const sizeInMB = (archive.pointer() / 1024 / 1024).toFixed(2);
+  console.log(`✅ Arquivo ZIP criado com sucesso: ${outputPath}`);
+  console.log(`   Tamanho total: ${sizeInMB} MB`);
+});
+
+archive.on('warning', (err) => {
+  if (err.code === 'ENOENT') {
+    console.warn(`⚠️ Aviso: ${err.message}`);
+  } else {
+    throw err;
+  }
+});
+
+archive.on('error', (err) => {
+  console.error(`❌ Erro ao criar arquivo ZIP: ${err.message}`);
   throw err;
 });
 
-// Pipe de saída do arquivo para o arquivo zip
+// Diretórios e arquivos a excluir
+const excludeDirs = ['.git', 'node_modules', 'dist'];
+const excludeFiles = ['.replit', '.gitignore', 'jacomprei-projeto.zip'];
+
+// Função para verificar se um item deve ser excluído
+function shouldExclude(name) {
+  return excludeDirs.includes(name) || excludeFiles.includes(name);
+}
+
+// Conectar archiver ao output stream
 archive.pipe(output);
 
-// Adicionar arquivos ao arquivo zip
-const directories = [
-  'client',
-  'server',
-  'shared',
-];
+// Adicionar arquivos e diretórios ao arquivo ZIP
+const rootDir = './';
+const files = fs.readdirSync(rootDir);
 
-const files = [
-  'package.json',
-  'package-lock.json',
-  'tsconfig.json',
-  'vite.config.ts',
-  'tailwind.config.ts',
-  'postcss.config.js',
-  'theme.json',
-  '.gitignore',
-  'drizzle.config.ts'
-];
-
-// Adicionar diretórios completos
-directories.forEach(dir => {
-  archive.directory(dir, dir);
+files.forEach((file) => {
+  const filePath = path.join(rootDir, file);
+  const stat = fs.statSync(filePath);
+  
+  // Verificar se o item deve ser excluído
+  if (shouldExclude(file)) {
+    return;
+  }
+  
+  if (stat.isDirectory()) {
+    console.log(`📁 Adicionando diretório: ${file}`);
+    archive.directory(filePath, file);
+  } else {
+    console.log(`📄 Adicionando arquivo: ${file}`);
+    archive.file(filePath, { name: file });
+  }
 });
 
-// Adicionar arquivos individuais
-files.forEach(file => {
-  archive.file(file, { name: file });
-});
-
-// Finalizar o arquivo e fechar
+// Finalizar o arquivo
 archive.finalize();
-
-console.log('Criando arquivo zip do projeto...');
-
-output.on('close', function() {
-  console.log(`Arquivo zip criado com sucesso: jacomprei-projeto.zip (${(archive.pointer() / 1024 / 1024).toFixed(2)} MB)`);
-  console.log('Você pode baixar este arquivo agora!');
-});

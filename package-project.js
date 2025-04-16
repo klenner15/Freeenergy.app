@@ -1,46 +1,93 @@
 
-const { spawn } = require('child_process');
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
-console.log('🔍 Iniciando processo de empacotamento do projeto JáComprei.app');
-
-// Função para executar um comando de forma assíncrona
-function runCommand(command, args) {
-  return new Promise((resolve, reject) => {
-    console.log(`🚀 Executando: ${command} ${args.join(' ')}`);
-    
-    const process = spawn(command, args, { stdio: 'inherit' });
-    
-    process.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`O comando falhou com código ${code}`));
-      }
-    });
-    
-    process.on('error', (err) => {
-      reject(err);
-    });
-  });
-}
-
-async function packageProject() {
+// Função para executar comandos e exibir a saída
+function runCommand(command, hideOutput = false) {
+  console.log(`Executando: ${command}`);
   try {
-    // Passo 1: Criar o arquivo ZIP
-    console.log('📦 Criando arquivo ZIP do projeto...');
-    await runCommand('node', ['zipProject.js']);
-    
-    // Passo 2: Fazer upload para o Object Storage
-    console.log('☁️ Fazendo upload para o Object Storage...');
-    await runCommand('node', ['uploadToStorage.js']);
-    
-    console.log('✅ Processo concluído com sucesso!');
-    console.log('👉 O arquivo ZIP está disponível no Object Storage do seu Repl');
-    console.log('👉 Acesse a aba "Object Storage" no painel do Replit para gerenciar seus arquivos');
-    
+    const options = { encoding: 'utf8', stdio: hideOutput ? 'pipe' : 'inherit' };
+    const output = execSync(command, options);
+    if (hideOutput && output) {
+      console.log('✅ Comando executado com sucesso');
+    }
+    return output;
   } catch (error) {
-    console.error('❌ Erro durante o processo:', error.message);
+    console.error(`❌ Erro ao executar comando: ${command}`);
+    console.error(error.message);
+    return null;
   }
 }
 
-packageProject();
+// Verificar dependências e instalar se necessário
+async function checkDependencies() {
+  console.log('🔍 Verificando dependências...');
+  
+  try {
+    // Verificar se archiver está instalado
+    require.resolve('archiver');
+    console.log('✅ Dependência "archiver" já está instalada');
+  } catch (e) {
+    console.log('⚠️ Dependência "archiver" não encontrada, instalando...');
+    runCommand('npm install archiver --save');
+  }
+  
+  try {
+    // Verificar se @google-cloud/storage está instalado
+    require.resolve('@google-cloud/storage');
+    console.log('✅ Dependência "@google-cloud/storage" já está instalada');
+  } catch (e) {
+    console.log('⚠️ Dependência "@google-cloud/storage" não encontrada, instalando...');
+    runCommand('npm install @google-cloud/storage --save');
+  }
+}
+
+// Empacotar projeto em um arquivo ZIP
+async function packageProject() {
+  console.log('\n📦 Empacotando projeto...');
+  runCommand('node zipProject.js');
+}
+
+// Fazer upload do pacote para o Storage
+async function uploadPackage() {
+  console.log('\n☁️ Fazendo upload do pacote...');
+  runCommand('node uploadToStorage.js');
+}
+
+// Sincronizar com GitHub se fornecidos os parâmetros
+async function syncWithGitHub() {
+  // Obter argumentos da linha de comando
+  const [,, REPO_URL, TOKEN] = process.argv;
+  
+  if (REPO_URL) {
+    console.log('\n🔄 Sincronizando com GitHub...');
+    if (TOKEN) {
+      runCommand(`node github-sync.js "${REPO_URL}" "${TOKEN}"`);
+    } else {
+      runCommand(`node github-sync.js "${REPO_URL}"`);
+    }
+  } else {
+    console.log('\n⚠️ URL do GitHub não fornecida, pulando sincronização.');
+    console.log('Para sincronizar com o GitHub, execute:');
+    console.log('node package-project.js <URL_GITHUB> [TOKEN_GITHUB]');
+  }
+}
+
+// Função principal
+async function main() {
+  console.log('🚀 Iniciando processo de empacotamento e publicação do projeto Já Comprei...\n');
+  
+  // Executar passos em sequência
+  await checkDependencies();
+  await packageProject();
+  await uploadPackage();
+  await syncWithGitHub();
+  
+  console.log('\n✨ Processo concluído com sucesso!');
+}
+
+// Executar função principal
+main().catch(error => {
+  console.error('❌ Erro no processo:', error.message);
+});

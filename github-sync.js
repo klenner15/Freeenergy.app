@@ -12,11 +12,14 @@ if (!REPO_URL) {
 }
 
 // Função para executar comandos e exibir a saída
-function runCommand(command) {
+function runCommand(command, hideOutput = false) {
   console.log(`Executando: ${command}`);
   try {
-    const output = execSync(command, { encoding: 'utf8', stdio: 'pipe' });
-    console.log(output);
+    const options = { encoding: 'utf8', stdio: hideOutput ? 'pipe' : 'inherit' };
+    const output = execSync(command, options);
+    if (hideOutput && output) {
+      console.log('Comando executado com sucesso');
+    }
     return output;
   } catch (error) {
     console.error(`Erro ao executar comando: ${command}`);
@@ -28,6 +31,8 @@ function runCommand(command) {
 // Sincronizar com o GitHub
 async function syncWithGitHub() {
   try {
+    console.log('🔄 Iniciando sincronização com GitHub...');
+    
     // Configurar git com valores seguros
     runCommand('git config --global user.name "Replit User"');
     runCommand('git config --global user.email "user@replit.com"');
@@ -38,42 +43,50 @@ async function syncWithGitHub() {
     // Limpar qualquer estado do Git que possa estar causando problemas
     runCommand('git remote rm origin 2>/dev/null || true');
     
-    // Inicializar repositório (força)
-    runCommand('rm -rf .git 2>/dev/null || true');
-    runCommand('git init');
+    // Verificar se o diretório .git existe
+    const gitExists = runCommand('test -d .git && echo "exists" || echo "not exists"', true).trim();
+    
+    if (gitExists === 'not exists') {
+      console.log('📁 Inicializando repositório Git...');
+      runCommand('git init');
+    }
 
     // Adicionar todos os arquivos
+    console.log('📋 Adicionando arquivos ao Git...');
     runCommand('git add .');
 
     // Criar commit
-    const commitResult = runCommand('git commit -m "Projeto Já Comprei - Sincronização automática"');
+    console.log('💾 Criando commit...');
+    const commitResult = runCommand('git commit -m "Projeto Já Comprei - Sincronização automática"', true);
     
     if (!commitResult) {
-      console.error("Falha ao criar commit. Tentando configurar autor manualmente.");
+      console.log("⚠️ Não há alterações para commit ou houve um problema. Tentando configurar autor manualmente.");
       runCommand('git config --global --add safe.directory /home/runner/workspace');
-      runCommand('git commit --allow-empty -m "Projeto Já Comprei - Sincronização automática"');
+      runCommand('git commit --allow-empty -m "Projeto Já Comprei - Sincronização automática"', true);
     }
 
     // Configurar repositório remoto com token
+    console.log('🔗 Configurando repositório remoto...');
     if (TOKEN) {
       // Usar token na URL (formato seguro)
       const repoUrlWithToken = REPO_URL.replace('https://', `https://x-access-token:${TOKEN}@`);
-      runCommand(`git remote add origin ${repoUrlWithToken}`);
+      runCommand(`git remote add origin ${repoUrlWithToken}`, true);
     } else {
       runCommand(`git remote add origin ${REPO_URL}`);
     }
 
-    // Forçar push para o repositório (tentativa principal)
-    const pushResult = runCommand('git push -f origin master');
+    // Forçar push para o repositório
+    console.log('⬆️ Enviando alterações para GitHub...');
+    const pushResult = runCommand('git push -f origin master', true);
     
     if (!pushResult) {
-      console.log("Tentando push para branch main...");
-      runCommand('git push -f origin main');
+      console.log("⚠️ Push para 'master' falhou. Tentando push para branch 'main'...");
+      runCommand('git push -f origin main', true);
     }
 
-    console.log('Sincronização com GitHub concluída com sucesso!');
+    console.log('✅ Sincronização com GitHub concluída com sucesso!');
   } catch (error) {
-    console.error('Falha na sincronização com GitHub:', error.message);
+    console.error('❌ Falha na sincronização com GitHub:', error.message);
   }
 }
 

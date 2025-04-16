@@ -1,18 +1,18 @@
 
-const fs = require('fs');
 const { Storage } = require('@google-cloud/storage');
+const fs = require('fs');
 
 async function uploadToStorage() {
   try {
     // Verificar se o arquivo existe
-    const fileName = 'jacomprei-app.zip';
+    const fileName = 'jacomprei-projeto.zip';
     if (!fs.existsSync(fileName)) {
       console.error(`❌ Arquivo ${fileName} não encontrado. Execute primeiro o script zipProject.js`);
       return;
     }
 
     // Verificar se o ID do bucket está configurado
-    const configFile = fs.readFileSync('.replit', 'utf8');
+    const configFile = fs.existsSync('.replit') ? fs.readFileSync('.replit', 'utf8') : '';
     const bucketIdMatch = configFile.match(/defaultBucketID\s*=\s*"([^"]+)"/);
     
     if (!bucketIdMatch) {
